@@ -1,3 +1,5 @@
+from typing import Any
+
 import requests
 import scrapy
 from bs4 import BeautifulSoup
@@ -8,6 +10,11 @@ from topscrape.services import convert_to_int
 
 
 class BooksSpider(scrapy.Spider):
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.page = None
+
     name = "books"
 
     allowed_domains = ["books.toscrape.com"]
@@ -20,21 +27,15 @@ class BooksSpider(scrapy.Spider):
 
             detail_page_url = response.urljoin(url)
 
-            page = self.get_detail_page(detail_page_url)
+            self.page = self._get_detail_page(detail_page_url)
 
-            title = page.css("div.col-sm-6.product_main > h1::text").get()
-            price = page.css(".price_color::text").get()[2:]
-            amount_in_stock = page.css(
-                "p.instock.availability"
-            ).xpath("string()").get().strip()
-            _, rating = page.css("p.star-rating::attr(class)").get().split()
-            category = page.xpath(
-                "//th[text()='Product Type']/following-sibling::td/text()"
-            ).get()
-            description = page.css("article.product_page > p::text").get()
-            upc = page.xpath(
-                "//th[text()='UPC']/following-sibling::td/text()"
-            ).get()
+            title = self._get_title()
+            price = self._get_price()
+            amount_in_stock = self._get_amount_in_stock()
+            rating = self._get_rating()
+            category = self._get_rating()
+            description = self._get_description()
+            upc = self._get_upc()
 
             yield {
                 "Title": title,
@@ -51,10 +52,37 @@ class BooksSpider(scrapy.Spider):
         if next_page is not None:
             yield response.follow(next_page, callback=self.parse)
 
-    def get_detail_page(self, url: str) -> Selector | None:
+    def _get_title(self) -> str:
+        return self.page.css("div.col-sm-6.product_main > h1::text").get()
+
+    def _get_price(self) -> float:
+        return float(self.page.css(".price_color::text").get()[2:])
+
+    def _get_amount_in_stock(self) -> str:
+        return self.page.css(
+            "p.instock.availability"
+        ).xpath("string()").get().strip()
+
+    def _get_rating(self) -> str:
+        _, rating = self.page.css("p.star-rating::attr(class)").get().split()
+        return rating
+
+    def _get_category(self) -> str:
+        return self.page.xpath(
+            "//th[text()='Product Type']/following-sibling::td/text()"
+        ).get()
+
+    def _get_description(self) -> str:
+        return self.page.css("article.product_page > p::text").get()
+
+    def _get_upc(self) -> str:
+        return self.page.xpath(
+            "//th[text()='UPC']/following-sibling::td/text()"
+        ).get()
+
+    @staticmethod
+    def _get_detail_page(url: str) -> Selector | None:
         response = requests.get(url)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
             return Selector(text=str(soup))
-        else:
-            return None
